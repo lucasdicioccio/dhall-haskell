@@ -1,42 +1,43 @@
-{-# LANGUAGE CPP                   #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE OverloadedStrings #-}
 
-{-| This module contains Dhall's parser combinators
--}
+-- | This module contains Dhall's parser combinators
+module Dhall.Parser.Combinators (
+    Parser (..),
+    SourcedException (..),
+    laxSrcEq,
+    count,
+    range,
+    option,
+    star,
+    plus,
+    satisfy,
+    Dhall.Parser.Combinators.takeWhile,
+    takeWhile1,
+    toMap,
+    toMapWith,
+    base,
+) where
 
-module Dhall.Parser.Combinators
-    ( Parser(..)
-    , SourcedException(..)
-    , laxSrcEq
-    , count
-    , range
-    , option
-    , star
-    , plus
-    , satisfy
-    , Dhall.Parser.Combinators.takeWhile
-    , takeWhile1
-    , toMap
-    , toMapWith
-    , base
-    ) where
-
-
+#if (MIN_VERSION_base(4,10,0))
+import Control.Applicative     (Alternative (..))
+#else
 import Control.Applicative     (Alternative (..), liftA2)
-import Control.Exception       (Exception)
-import Control.Monad           (MonadPlus (..))
-import Data.String             (IsString (..))
-import Data.Text               (Text)
-import Data.Void               (Void)
-import Dhall.Map               (Map)
-import Dhall.Src               (Src (..))
-import Prettyprinter           (Pretty (..))
+#endif
+import Control.Exception (Exception)
+import Control.Monad (MonadPlus (..))
+import Data.String (IsString (..))
+import Data.Text (Text)
+import Data.Void (Void)
+import Dhall.Map (Map)
+import Dhall.Src (Src (..))
+import Prettyprinter (Pretty (..))
 import Text.Parser.Combinators (try, (<?>))
-import Text.Parser.Token       (TokenParsing (..))
+import Text.Parser.Token (TokenParsing (..))
 
 import qualified Control.Monad.Fail
-import qualified Data.Char                   as Char
+import qualified Data.Char as Char
 import qualified Data.Text
 import qualified Dhall.Map
 import qualified Dhall.Pretty
@@ -50,14 +51,14 @@ import qualified Text.Parser.Token.Style
 -- | An exception annotated with a `Src` span
 data SourcedException e = SourcedException Src e
 
-instance Exception e => Exception (SourcedException e)
+instance (Exception e) => Exception (SourcedException e)
 
-instance Show e => Show (SourcedException e) where
+instance (Show e) => Show (SourcedException e) where
     show (SourcedException source exception) =
-            show exception
-        <>  "\n"
-        <>  "\n"
-        <>  Pretty.renderString
+        show exception
+            <> "\n"
+            <> "\n"
+            <> Pretty.renderString
                 (Dhall.Pretty.layout (pretty source))
 
 -- | Doesn't force the 'Data.Text.Text' part
@@ -65,16 +66,16 @@ laxSrcEq :: Src -> Src -> Bool
 laxSrcEq (Src p q _) (Src p' q' _) = eq p p' && eq q q'
   where
     -- Don't compare filename (which is FilePath = String)
-    eq  :: Text.Megaparsec.SourcePos -> Text.Megaparsec.SourcePos -> Bool
+    eq :: Text.Megaparsec.SourcePos -> Text.Megaparsec.SourcePos -> Bool
     eq (Text.Megaparsec.SourcePos _ a b) (Text.Megaparsec.SourcePos _ a' b') =
         a == a' && b == b'
 {-# INLINE laxSrcEq #-}
 
-{-| A `Parser` that is almost identical to
+{- | A `Parser` that is almost identical to
     @"Text.Megaparsec".`Text.Megaparsec.Parsec`@ except treating Haskell-style
     comments as whitespace
 -}
-newtype Parser a = Parser { unParser :: Text.Megaparsec.Parsec Void Text a }
+newtype Parser a = Parser {unParser :: Text.Megaparsec.Parsec Void Text a}
 
 instance Functor Parser where
     fmap f (Parser x) = Parser (fmap f x)
@@ -117,23 +118,29 @@ instance Control.Monad.Fail.MonadFail Parser where
 
 instance Alternative Parser where
     empty = Parser empty
+
     -- {-# INLINE empty #-}
 
     Parser a <|> Parser b = Parser (a <|> b)
+
     -- {-# INLINE (<|>) #-}
 
     some (Parser a) = Parser (some a)
+
     -- {-# INLINE some #-}
 
     many (Parser a) = Parser (many a)
-    -- {-# INLINE many #-}
+
+-- {-# INLINE many #-}
 
 instance MonadPlus Parser where
     mzero = empty
+
     -- {-# INLINE mzero #-}
 
     mplus = (<|>)
-    -- {-# INLINE mplus #-}
+
+-- {-# INLINE mplus #-}
 
 instance Text.Megaparsec.MonadParsec Void Text Parser where
     parseError e = Parser (Text.Megaparsec.parseError e)
@@ -169,42 +176,46 @@ instance Text.Megaparsec.MonadParsec Void Text Parser where
 
     updateParserState f = Parser (Text.Megaparsec.updateParserState f)
 
-instance Semigroup a => Semigroup (Parser a) where
+#if (MIN_VERSION_megaparsec(9,4,0))
+    mkParsec f = Parser (Text.Megaparsec.mkParsec f)
+#endif
+
+instance (Semigroup a) => Semigroup (Parser a) where
     (<>) = liftA2 (<>)
 
 instance (Semigroup a, Monoid a) => Monoid (Parser a) where
     mempty = pure mempty
 
-instance IsString a => IsString (Parser a) where
+instance (IsString a) => IsString (Parser a) where
     fromString x = fromString x <$ Text.Megaparsec.Char.string (fromString x)
 
 instance Text.Parser.Combinators.Parsing Parser where
-  try = Text.Megaparsec.try
+    try = Text.Megaparsec.try
 
-  (<?>) = (Text.Megaparsec.<?>)
+    (<?>) = (Text.Megaparsec.<?>)
 
-  skipMany = Text.Megaparsec.skipMany
+    skipMany = Text.Megaparsec.skipMany
 
-  skipSome = Text.Megaparsec.skipSome
+    skipSome = Text.Megaparsec.skipSome
 
-  unexpected = fail
+    unexpected = fail
 
-  eof = Parser Text.Megaparsec.eof
+    eof = Parser Text.Megaparsec.eof
 
-  notFollowedBy = Text.Megaparsec.notFollowedBy
+    notFollowedBy = Text.Megaparsec.notFollowedBy
 
 instance Text.Parser.Char.CharParsing Parser where
-  satisfy = Parser . Text.Megaparsec.satisfy
+    satisfy = Parser . Text.Megaparsec.satisfy
 
-  char = Text.Megaparsec.Char.char
+    char = Text.Megaparsec.Char.char
 
-  notChar = Text.Megaparsec.Char.char
+    notChar = Text.Megaparsec.Char.char
 
-  anyChar = Text.Megaparsec.anySingle
+    anyChar = Text.Megaparsec.anySingle
 
-  string = fmap Data.Text.unpack . Text.Megaparsec.Char.string . fromString
+    string = fmap Data.Text.unpack . Text.Megaparsec.Char.string . fromString
 
-  text = Text.Megaparsec.Char.string
+    text = Text.Megaparsec.Char.string
 
 instance TokenParsing Parser where
     someSpace =
@@ -240,43 +251,49 @@ star p = plus p <|> pure mempty
 plus :: (Alternative f, Monoid a) => f a -> f a
 plus p = mappend <$> p <*> star p
 
--- | @satisfy p@ creates a parser that consumes and return the next character
---   if it satisfies the predicate @p@
+{- | @satisfy p@ creates a parser that consumes and return the next character
+  if it satisfies the predicate @p@
+-}
 satisfy :: (Char -> Bool) -> Parser Text
 satisfy = fmap Data.Text.singleton . Text.Parser.Char.satisfy
 
--- | @takeWhile p@ creates a parser that accepts the longest sequence of characters
---   that match the given predicate possibly returning an empty sequence
+{- | @takeWhile p@ creates a parser that accepts the longest sequence of characters
+  that match the given predicate possibly returning an empty sequence
+-}
 takeWhile :: (Char -> Bool) -> Parser Text
 takeWhile predicate = Parser (Text.Megaparsec.takeWhileP Nothing predicate)
 
--- | @takeWhile1 p@ creates a parser that accepts the longest sequence of characters
---   that match the given predicate. It fails when no character was consumed
+{- | @takeWhile1 p@ creates a parser that accepts the longest sequence of characters
+  that match the given predicate. It fails when no character was consumed
+-}
 takeWhile1 :: (Char -> Bool) -> Parser Text
 takeWhile1 predicate = Parser (Text.Megaparsec.takeWhile1P Nothing predicate)
 
--- | Creates a map with the given key-value pairs, failing if there was a
---   duplicate key.
+{- | Creates a map with the given key-value pairs, failing if there was a
+  duplicate key.
+-}
 toMap :: [(Text, a)] -> Parser (Map Text a)
 toMap kvs = Dhall.Map.unorderedTraverseWithKey (\_k v -> v) m
   where
     m = Dhall.Map.fromListWithKey err (map (\(k, v) -> (k, pure v)) kvs)
 
-    err k _v1 _v2 = Text.Parser.Combinators.unexpected
-                        ("duplicate field: " ++ Data.Text.unpack k)
+    err k _v1 _v2 =
+        Text.Parser.Combinators.unexpected
+            ("duplicate field: " ++ Data.Text.unpack k)
 
--- | Creates a 'Map Text a' using the provided combining function and the
---   key-value pairs
-toMapWith
-    :: (Text -> Parser a -> Parser a -> Parser a)
-    -> [(Text, a)]
-    -> Parser (Map Text a)
+{- | Creates a 'Map Text a' using the provided combining function and the
+  key-value pairs
+-}
+toMapWith ::
+    (Text -> Parser a -> Parser a -> Parser a) ->
+    [(Text, a)] ->
+    Parser (Map Text a)
 toMapWith combine kvs = sequence m
   where
     m = Dhall.Map.fromListWithKey combine (map (\(k, v) -> (k, pure v)) kvs)
 
 -- | Convert a list of digits to the equivalent number
-base :: Num n => [Char] -> n -> n
+base :: (Num n) => [Char] -> n -> n
 digits `base` b = foldl snoc 0 (map (fromIntegral . digitToNumber) digits)
   where
     snoc result number = result * b + number

@@ -4,9 +4,6 @@ packages:
   ./dhall-csv
   ./dhall-docs
   ./dhall-json
-  ./dhall-lsp-server
-  ./dhall-nix
-  ./dhall-nixpkgs
   ./dhall-openapi
   ./dhall-toml
   ./dhall-yaml
